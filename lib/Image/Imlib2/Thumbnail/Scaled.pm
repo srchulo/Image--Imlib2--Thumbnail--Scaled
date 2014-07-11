@@ -58,7 +58,7 @@ This module by default generates sizes very similar to L<Image::Imlib2::Thumbnai
 
   my $thumbnail = Image::Imlib2::Thumbnail::Scaled->new;
 
-Returns a new L<Image::Imlib2::Thumbnail::Scaled> object. Can take in two optional
+Returns a new L<Image::Imlib2::Thumbnail::Scaled> object. Can take in three optional
 values:
 
 =head3 sizes
@@ -87,6 +87,13 @@ Setting sizes like this allows you do override the default sizes that are genera
 If set to 1, L<generate|/"generate"> will return the original image along with 
 the created thumbnails in the returned arrayref. Default is false.
 
+=head3 delete_original
+
+  my $thumbnail = Image::Imlib2::Thumbnail::Scaled->new({delete_original => 1});
+
+If set to 1, the original image will be deleted once all resized images are made.
+Default is false.
+
 =cut
 
 sub new {
@@ -94,7 +101,7 @@ sub new {
     my $self  = $class->SUPER::new(@_);
     $self->sizes(
         [   
-						{   
+			{   
                 name   => 'square',
                 width  => 75,
                 height => 75
@@ -143,8 +150,28 @@ sub include_original {
 	return $self->{include_original};
 }
 
+=head2 delete_original
+
+  $thumbnail->delete_original(1);
+
+If set to 1, the original image will be deleted once all resized images are made.
+Default is false.
+
+=cut
+
+sub delete_original { 
+	my $self = shift;
+
+	if(@_) { 
+		$self->{delete_original} = 1;
+	}
+
+	return $self->{delete_original};
+}
+
 =head2 add_size
-	Add an extra size:
+
+Add an extra size:
 
   $thumbnail->add_size(
       {   
@@ -204,12 +231,12 @@ sub generate {
 
     my @thumbnails = ();
 		push @thumbnails, {   
-						filename => $filename,
+			filename => $filename,
             name     => 'original',
             width    => $o_width,
             height   => $o_height,
-						requested_width => $o_width,
-						requested_height => $o_height,
+			requested_width => $o_width,
+			requested_height => $o_height,
         } if $self->include_original;
 
 
@@ -243,13 +270,16 @@ sub generate {
             {
             filename  => $destination,
             name      => $name,
-						requested_width => $width,
-						requested_height => $height,
+			requested_width => $width,
+			requested_height => $height,
             width     => $t_width,
             height    => $t_height,
             mime_type => $mime_type,
             };
     }
+
+	unlink $filename if $self->delete_original;
+	rename $filename, $self->orignal_path if 
 
     return \@thumbnails;
 }

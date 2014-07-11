@@ -1,5 +1,8 @@
 Revision history for Image-Imlib2-Thumbnail-Scaled
 
+0.04		07/10/2014 23:33 PST
+				Deleted rename error line
+
 0.03		07/10/2014 23:33 PST
 				Added delete_original method
 

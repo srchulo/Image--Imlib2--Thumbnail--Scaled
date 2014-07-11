@@ -16,11 +16,11 @@ Image::Imlib2::Thumbnail::Scaled - Create scaled thumbnails while keeping the as
 
 =head1 VERSION
 
-Version 0.03
+Version 0.04
 
 =cut
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 
 =head1 SYNOPSIS
@@ -279,7 +279,6 @@ sub generate {
     }
 
 	unlink $filename if $self->delete_original;
-	rename $filename, $self->orignal_path if 
 
     return \@thumbnails;
 }

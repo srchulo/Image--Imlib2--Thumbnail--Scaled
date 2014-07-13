@@ -2,13 +2,12 @@ package Image::Imlib2::Thumbnail::Scaled;
 
 use strict;
 use warnings;
-use File::Basename qw(fileparse);
+use Object::Tiny::RW::XS qw/sizes include_original delete_original original_width original_height move_original/;
+use File::Basename qw/fileparse basename dirname/;
+use File::Copy qw/move/;
 use Image::Imlib2;
 use MIME::Types;
 use Path::Class;
-use base qw(Class::Accessor::Fast);
-__PACKAGE__->mk_accessors(qw(sizes));
-
 
 =head1 NAME
 
@@ -16,12 +15,11 @@ Image::Imlib2::Thumbnail::Scaled - Create scaled thumbnails while keeping the as
 
 =head1 VERSION
 
-Version 0.04
+Version 0.05
 
 =cut
 
-our $VERSION = '0.04';
-
+our $VERSION = '0.05';
 
 =head1 SYNOPSIS
 
@@ -58,12 +56,9 @@ This module by default generates sizes very similar to L<Image::Imlib2::Thumbnai
 
   my $thumbnail = Image::Imlib2::Thumbnail::Scaled->new;
 
-Returns a new L<Image::Imlib2::Thumbnail::Scaled> object. Can take in three optional
-values:
+Returns a new L<Image::Imlib2::Thumbnail::Scaled> object. Can take in any of the subroutines as options (except L</add_size>). For example:
 
-=head3 sizes
-
-  my $thumbnail = Image::Imlib2::Thumbnail::Scaled->new({
+  my $thumbnail = Image::Imlib2::Thumbnail::Scaled->new(
     sizes => [
                { 
                  name => 'my_image',
@@ -76,29 +71,17 @@ values:
                  height => 240,
                }
              ]
-  });
+  );
 
-Setting sizes like this allows you do override the default sizes that are generated.
+  my $thumbnail = Image::Imlib2::Thumbnail::Scaled->new(include_original => 1);
 
-=head3 include_original
-
-  my $thumbnail = Image::Imlib2::Thumbnail::Scaled->new({include_original => 1});
-
-If set to 1, L<generate|/"generate"> will return the original image along with 
-the created thumbnails in the returned arrayref. Default is false.
-
-=head3 delete_original
-
-  my $thumbnail = Image::Imlib2::Thumbnail::Scaled->new({delete_original => 1});
-
-If set to 1, the original image will be deleted once all resized images are made.
-Default is false.
+  #or multiple
+  my $thumbnail = Image::Imlib2::Thumbnail::Scaled->new(include_original => 1, delete_original => 1);
 
 =cut
 
-sub new {
-    my $class = shift;
-    my $self  = $class->SUPER::new(@_);
+sub _set_default_sizes {
+	my ($self) = @_;
     $self->sizes(
         [   
 			{   
@@ -127,9 +110,27 @@ sub new {
                 height => 768
             },
         ]
-    ) unless $self->sizes;
-    return $self;
+    );
 }
+
+=head2 sizes
+
+  my $thumbnail = Image::Imlib2::Thumbnail::Scaled->new(
+    sizes => [
+               { 
+                 name => 'my_image',
+                 width => 180,
+                 height => 180,
+               },
+               { 
+                 name => 'my_other_image',
+                 width => 240,
+                 height => 240,
+               }
+             ]
+  );
+
+L<sizes|/"sizes"> allows you to override the default sizes that are provided.
 
 =head2 include_original
 
@@ -140,16 +141,6 @@ the created thumbnails in the returned arrayref. Default is false.
 
 =cut
 
-sub include_original { 
-	my $self = shift;
-
-	if(@_) { 
-		$self->{include_original} = 1;
-	}
-
-	return $self->{include_original};
-}
-
 =head2 delete_original
 
   $thumbnail->delete_original(1);
@@ -159,15 +150,15 @@ Default is false.
 
 =cut
 
-sub delete_original { 
-	my $self = shift;
+=head2 move_original
 
-	if(@_) { 
-		$self->{delete_original} = 1;
-	}
+  $thumbnail->move_original(1);
 
-	return $self->{delete_original};
-}
+If set to 1, the original image will be moved to the directory that is passed into L</generate> along
+with all of the other resized images.
+Default is false.
+
+=cut
 
 =head2 add_size
 
@@ -213,32 +204,56 @@ Since the aspect ratio is kept, width and height will hold the resulting width a
 while requested_width and requested_height will hold the width and height that the image was
 requested to be resized to.
 
+You can also pass in an optional third argument to L</generate>, which if set to true will return a hash of hashes
+for all of the resized images, where the key is the name provided in L</sizes>.
+
+  my $thumbnails = $thumbnail->generate( $source, $directory, 1 );
+  while(my ($name, $thumbnail) = each %$thumbnails) {
+    my $name = $thumbnail->{name};
+    my $width = $thumbnail->{width};
+    my $requested_width = $thumbnail->{requested_width};
+    my $height = $thumbnail->{height};
+    my $requested_height = $thumbnail->{requested_height};
+    my $filename = $thumbnail->{filename};
+    my $mime_type = $thumbnail->{mime_type};
+    print "$name $mime_type is $width x $height at $filename with requested width $requested_width requested height $requested_height\n";
+  }
+
 =cut
 
 sub generate {
-    my ( $self, $filename, $directory ) = @_;
+    my ($self, $filename, $directory, $return_hash) = @_;
     my $image = Image::Imlib2->load($filename);
+	my $return_obj;
 
     my ( $o_width, $o_height )
         = ( $image->width, $image->height );
-		$self->{original_width} = $o_width;
-		$self->{original_height} = $o_height;
+		$self->original_width($o_width);
+		$self->original_height($o_height);
     my $original_extension = [ fileparse( $filename, qr/\.[^.]*?$/ ) ]->[2]
         || '.jpg';
     $original_extension =~ s/^\.//;
 
     my $mime_type = MIME::Types->new->mimeTypeOf($original_extension);
 
-    my @thumbnails = ();
-		push @thumbnails, {   
+	if($self->include_original) { 
+		my $orig_file = {   
 			filename => $filename,
             name     => 'original',
             width    => $o_width,
             height   => $o_height,
 			requested_width => $o_width,
 			requested_height => $o_height,
-        } if $self->include_original;
+        };
 
+		if($return_hash) { 
+			$return_obj->{original} = $orig_file;
+		}	
+		else { push @$return_obj, $orig_file }
+	}
+
+	#set defaults if they do not exist!
+	$self->_set_default_sizes unless $self->sizes;
 
     foreach my $size ( @{ $self->sizes } ) {
         my ( $name, $width, $height) = ( $size->{name}, $size->{width}, $size->{height} );
@@ -266,8 +281,8 @@ sub generate {
             ->stringify;
         $scaled_image->set_quality($quality);
         $scaled_image->save($destination);
-        push @thumbnails,
-            {
+
+		my $resized_image = {
             filename  => $destination,
             name      => $name,
 			requested_width => $width,
@@ -275,12 +290,21 @@ sub generate {
             width     => $t_width,
             height    => $t_height,
             mime_type => $mime_type,
-            };
+        };
+
+		if($return_hash) { 
+			$return_obj->{$name} = $resized_image;
+		}
+		else { push @$return_obj, $resized_image }
     }
 
+	if($self->move_original) { 
+		my $base_filename = basename($filename);
+		move($filename, file($directory, $base_filename)->stringify);
+	}
 	unlink $filename if $self->delete_original;
 
-    return \@thumbnails;
+    return $return_obj;
 }
 
 =head2 original_width
@@ -291,8 +315,6 @@ This subroutine returns the width of the original image. (Can only be called aft
 
 =cut
 
-sub original_width { shift->{original_width} }
-
 =head2 original_height
 
   my $original_height = $thumbnail->original_height;
@@ -300,8 +322,6 @@ sub original_width { shift->{original_width} }
 This subroutine returns the height of the original image. (Can only be called after L<generate|/"generate">).
 
 =cut
-
-sub original_height { shift->{original_height} }
 
 =head1 AUTHOR
 

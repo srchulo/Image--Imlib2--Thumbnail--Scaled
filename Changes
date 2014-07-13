@@ -1,5 +1,8 @@
 Revision history for Image-Imlib2-Thumbnail-Scaled
 
+0.05		07/12/2014 18:00 PST
+				Complete overhaul. Now uses Object::Tiny::RW::XS. Added move_original.
+
 0.04		07/10/2014 23:33 PST
 				Deleted rename error line
 

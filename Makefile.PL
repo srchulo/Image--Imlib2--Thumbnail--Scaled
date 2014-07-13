@@ -16,10 +16,12 @@ WriteMakefile(
     },
     BUILD_REQUIRES => {
         'Test::More' => 0,
-        'Class::Accessor::Fast' => '0',
         'Image::Imlib2'         => '2.00',
         'MIME::Types'           => '0',
-        'Path::Class'           => '0',
+		'Object::Tiny::RW::XS' => '0',
+		'File::Copy' => '0',
+		'File::Basename' => '0',
+		'Path::Class' => '0',
     },
     PREREQ_PM => {
         #'ABC'              => 1.6,
